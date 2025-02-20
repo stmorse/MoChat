@@ -126,7 +126,7 @@
       try {
         const res = await fetch(`${serverUrl}/active_users`);
         const data = await res.json();
-        updateActiveUsers(data.users);
+        updateActiveUsers(data.users, username);
       } catch (e) {
         addMessage("Error fetching active users: " + e, 'system-message');
       }
@@ -140,9 +140,12 @@
         if (username === 'admin') {
           document.getElementById('clearHistoryBtn').style.display = 'block';
         }
+        fetchActiveUsers(); // Fetch active users after connecting
       };
       ws.onmessage = (event) => {
-        const message = event.data;
+        const data = JSON.parse(event.data);
+        const message = data.message;
+        const color = data.color;
         if (message.includes('joined the chat') || message.includes('left the chat')) {
           addMessage(message, 'system-message');
           // Fetch active users again to update the list
@@ -150,18 +153,28 @@
         } else {
           const [user, ...msgParts] = message.split(': ');
           const msg = msgParts.join(': ');
-          addMessage(`<span class="username">${user}</span>: <span class="message-text">${msg}</span>`);
+          addMessage(`<span class="username" style="color: ${color};">${user}</span>: <span class="message-text">${msg}</span>`);
         }
       };
-      ws.onclose = () => addMessage('Disconnected from chat.', 'system-message');
+      ws.onclose = () => {
+        addMessage('Disconnected from chat.', 'system-message');
+        fetchActiveUsers(); // Fetch active users after disconnecting
+      };
       ws.onerror = () => addMessage('WebSocket error.', 'system-message');
     });
 
     document.getElementById('messageForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const input = document.getElementById('messageInput');
+      let message = input.value.trim();
+      if (message.length === 0) {
+        return; // Do not send empty messages
+      }
+      if (message.length > 200) {
+        message = message.substring(0, 200); // Clip messages over 200 characters
+      }
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(input.value);
+        ws.send(message);
         input.value = '';
       }
     });
@@ -198,9 +211,12 @@
       }
     }
 
-    function updateActiveUsers(users) {
+    function updateActiveUsers(users, currentUser = null) {
       const activeUsersDiv = document.getElementById('activeUsers');
       activeUsersDiv.innerHTML = '';
+      if (currentUser && !users.includes(currentUser)) {
+        users.push(currentUser); // Ensure the current user is included
+      }
       users.forEach(user => {
         const div = document.createElement('div');
         div.textContent = user;
