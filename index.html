@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Family Chat Client</title>
+  <title>MoChat</title>
   <style>
     body { 
       font-family: sans-serif; 
@@ -96,6 +96,11 @@
       flex-grow: 1;
       overflow-y: scroll;
     }
+    .active-users-heading {
+      font-style: italic;
+      color: gray;
+      margin-bottom: 10px;
+    }
     #clearHistoryBtn {
       margin-top: 10px;
       padding: 10px;
@@ -145,7 +150,9 @@
 
     <div id="sidePanel">
       <div id="currentUser"></div>
-      <div id="activeUsers"></div>
+      <div id="activeUsers">
+        <div class="active-users-heading">current active:</div>
+      </div>
     </div>
   </div>
 
@@ -303,7 +310,7 @@
 
     function updateActiveUsers(users, currentUser = null) {
       const activeUsersDiv = document.getElementById('activeUsers');
-      activeUsersDiv.innerHTML = '';
+      activeUsersDiv.innerHTML = '<div class="active-users-heading">current active:</div>';
       if (currentUser && !Object.keys(users).includes(currentUser)) {
         users[currentUser] = 'black'; // Ensure the current user is included with default color
       }
