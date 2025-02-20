@@ -11,15 +11,31 @@
       justify-content: center; 
       align-items: flex-start; 
       height: 100vh; 
+      background: rgba(0, 0, 0, 0.1);
+      transition: background 0.3s;
+    }
+    body.connected {
+      background: white;
+    }
+    #container {
+      display: flex;
+      width: 60%; /* Adjust width as needed */
+      height: calc(90vh - 40px); /* Adjust height to fill the remaining space */
+      margin: 0 auto; /* Center the container horizontally */
     }
     #chatContainer { 
-      width: 50%; 
+      width: 80%; 
       margin-top: 20px; 
+      filter: blur(5px); 
+      opacity: 0.5; 
+      transition: filter 0.3s, opacity 0.3s;
+      display: flex;
+      flex-direction: column;
     }
     #chat { 
       border: 1px solid #ccc; 
       padding: 10px; 
-      height: 300px; 
+      flex-grow: 1;
       overflow-y: scroll; 
       margin-bottom: 10px; 
     }
@@ -48,15 +64,36 @@
     .message-text {
       color: black;
     }
+    .timestamp {
+      color: lightgray;
+    }
     #sidePanel {
       margin-top: 20px;
-      width: 10%;
+      width: 20%;
       margin-left: 20px;
+      filter: blur(5px); 
+      opacity: 0.5; 
+      transition: filter 0.3s, opacity 0.3s;
+      display: flex;
+      flex-direction: column;
+    }
+    #currentUser {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .current-user-label {
+      font-style: italic;
+      color: lightgray;
+    }
+    .current-user-name {
+      font-weight: bold;
     }
     #activeUsers {
       border: 1px solid #ccc;
       padding: 10px;
-      height: 300px;
+      flex-grow: 1;
       overflow-y: scroll;
     }
     #clearHistoryBtn {
@@ -64,27 +101,40 @@
       padding: 10px;
       box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
     }
+    .divider {
+      /* border-top: 1px solid lightgray; */
+      margin: 2px 0;
+    }
+    #connectionForm {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+    }
+    #connectionForm label {
+      display: block;
+      margin-bottom: 10px;
+    }
+    #connectionForm input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+    }
+    #connectionForm button {
+      width: 100%;
+      padding: 10px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+    }
   </style>
 </head>
 <body>
-  <div id="chatContainer">
-    <div id="connectionForm">
-      <label>Server IP:
-        <input type="text" id="serverIp" placeholder="e.g. 203.0.113.0">
-      </label><br>
-      <label>Port:
-        <input type="text" id="serverPort" placeholder="e.g. 3333">
-      </label><br>
-      <label>Username:
-        <input type="text" id="username">
-      </label><br>
-      <label>Password:
-        <input type="password" id="password">
-      </label><br>
-      <button id="connectBtn">Connect</button>
-    </div>
-
-    <div id="chatInterface" style="display:none;">
+  <div id="container">
+    <div id="chatContainer">
       <div id="chat"></div>
       <form id="messageForm">
         <input type="text" id="messageInput" placeholder="Type your message" autocomplete="off">
@@ -92,17 +142,41 @@
       </form>
       <button id="clearHistoryBtn" style="display:none;">Clear History</button>
     </div>
+
+    <div id="sidePanel">
+      <div id="currentUser"></div>
+      <div id="activeUsers"></div>
+    </div>
   </div>
 
-  <div id="sidePanel">
-    <div id="activeUsers"></div>
+  <div id="connectionForm">
+    <label>Server IP:
+      <input type="text" id="serverIp" placeholder="e.g. 203.0.113.0">
+    </label>
+    <label>Port:
+      <input type="text" id="serverPort" placeholder="e.g. 3333">
+    </label>
+    <label>Username:
+      <input type="text" id="username">
+    </label>
+    <label>Password:
+      <input type="password" id="password">
+    </label>
+    <button id="connectBtn">Connect</button>
   </div>
 
   <script>
     let ws;
     let serverUrl;
 
-    document.getElementById('connectBtn').addEventListener('click', async () => {
+    document.getElementById('connectBtn').addEventListener('click', connect);
+    document.getElementById('connectionForm').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        connect();
+      }
+    });
+
+    async function connect() {
       const ip = document.getElementById('serverIp').value.trim();
       const port = document.getElementById('serverPort').value.trim();
       const username = document.getElementById('username').value.trim();
@@ -117,8 +191,10 @@
         const res = await fetch(`${serverUrl}/history`);
         const history = await res.json();
         history.forEach(msg => {
-          addMessage(`${new Date(msg.timestamp).toLocaleString()} - ${msg.username}: ${msg.message}`, 'history-message');
+          const formattedTimestamp = new Date(msg.timestamp).toLocaleString();
+          addMessage(`${msg.username}: ${msg.message}`, 'history-message', formattedTimestamp);
         });
+        addDivider(); // Add divider after loading history messages
       } catch (e) {
         addMessage("Error fetching history: " + e, 'system-message');
       }
@@ -135,25 +211,31 @@
       ws = new WebSocket(wsUrl);
       ws.onopen = () => {
         document.getElementById('connectionForm').style.display = 'none';
-        document.getElementById('chatInterface').style.display = 'block';
+        document.body.classList.add('connected');
+        document.getElementById('chatContainer').style.filter = 'none';
+        document.getElementById('chatContainer').style.opacity = '1';
+        document.getElementById('sidePanel').style.filter = 'none';
+        document.getElementById('sidePanel').style.opacity = '1';
         addMessage('Connected to chat.', 'system-message');
         if (username === 'admin') {
           document.getElementById('clearHistoryBtn').style.display = 'block';
         }
+        updateCurrentUser(username); // Update current user display
         fetchActiveUsers(); // Fetch active users after connecting
       };
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         const message = data.message;
         const color = data.color;
+        const timestamp = new Date(data.timestamp).toLocaleString();
         if (message.includes('joined the chat') || message.includes('left the chat')) {
-          addMessage(message, 'system-message');
+          addMessage(message, 'system-message', timestamp);
           // Fetch active users again to update the list
           fetchActiveUsers();
         } else {
           const [user, ...msgParts] = message.split(': ');
           const msg = msgParts.join(': ');
-          addMessage(`<span class="username" style="color: ${color};">${user}</span>: <span class="message-text">${msg}</span>`);
+          addMessage(`<span class="username" style="color: ${color};">${user}</span>: <span class="message-text">${msg}</span>`, '', timestamp);
         }
       };
       ws.onclose = () => {
@@ -161,7 +243,7 @@
         fetchActiveUsers(); // Fetch active users after disconnecting
       };
       ws.onerror = () => addMessage('WebSocket error.', 'system-message');
-    });
+    }
 
     document.getElementById('messageForm').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -190,15 +272,23 @@
       }
     });
 
-    function addMessage(msg, className = '') {
+    function addMessage(msg, className = '', timestamp = '') {
       const chat = document.getElementById('chat');
       const div = document.createElement('div');
-      div.innerHTML = msg;
+      div.innerHTML = `<span class="timestamp" style="color: lightgray;">${timestamp}</span> ${msg}`;
       if (className) {
         div.classList.add(className);
       }
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addDivider() {
+      const chat = document.getElementById('chat');
+      const div = document.createElement('div');
+      div.classList.add('divider');
+      div.innerHTML = '<hr>';
+      chat.appendChild(div);
     }
 
     async function fetchActiveUsers() {
@@ -214,14 +304,34 @@
     function updateActiveUsers(users, currentUser = null) {
       const activeUsersDiv = document.getElementById('activeUsers');
       activeUsersDiv.innerHTML = '';
-      if (currentUser && !users.includes(currentUser)) {
-        users.push(currentUser); // Ensure the current user is included
+      if (currentUser && !Object.keys(users).includes(currentUser)) {
+        users[currentUser] = 'black'; // Ensure the current user is included with default color
       }
-      users.forEach(user => {
+      for (const [user, color] of Object.entries(users)) {
         const div = document.createElement('div');
         div.textContent = user;
+        div.style.color = color;
         activeUsersDiv.appendChild(div);
-      });
+      }
+    }
+
+    function updateCurrentUser(username) {
+      const currentUserDiv = document.getElementById('currentUser');
+      const color = getUserColor(username);
+      currentUserDiv.innerHTML = `<span class="current-user-label">logged in as:</span> <span class="current-user-name" style="color: ${color};">${username}</span>`;
+    }
+
+    function getUserColor(username) {
+      const userColors = {
+        "admin": "black",
+        "alice": "wonderland",
+        "dad": "darkgreen",
+        "mom": "coral",
+        "isaac": "red",
+        "eli": "navyblue",
+        "papa": "teal"
+      };
+      return userColors[username] || "black";
     }
   </script>
 </body>
