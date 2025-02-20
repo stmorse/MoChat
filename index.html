@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Family Chat Client</title>
+  <style>
+    body { 
+      font-family: sans-serif; 
+      margin: 20px; 
+      display: flex; 
+      justify-content: center; 
+      align-items: flex-start; 
+      height: 100vh; 
+    }
+    #chatContainer { 
+      width: 50%; 
+      margin-top: 20px; 
+    }
+    #chat { 
+      border: 1px solid #ccc; 
+      padding: 10px; 
+      height: 300px; 
+      overflow-y: scroll; 
+      margin-bottom: 10px; 
+    }
+    #messageForm { 
+      display: flex; 
+      gap: 10px;
+    }
+    #messageInput { 
+      flex: 1; 
+      padding: 10px;
+    }
+    #messageForm button {
+      padding: 10px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .system-message {
+      font-style: italic;
+      color: lightgray;
+    }
+    .history-message {
+      color: darkgray;
+    }
+    .username {
+      color: blue;
+    }
+    .message-text {
+      color: black;
+    }
+    #sidePanel {
+      margin-top: 20px;
+      width: 10%;
+      margin-left: 20px;
+    }
+    #activeUsers {
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 300px;
+      overflow-y: scroll;
+    }
+    #clearHistoryBtn {
+      margin-top: 10px;
+      padding: 10px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div id="chatContainer">
+    <div id="connectionForm">
+      <label>Server IP:
+        <input type="text" id="serverIp" placeholder="e.g. 203.0.113.0">
+      </label><br>
+      <label>Port:
+        <input type="text" id="serverPort" placeholder="e.g. 3333">
+      </label><br>
+      <label>Username:
+        <input type="text" id="username">
+      </label><br>
+      <label>Password:
+        <input type="password" id="password">
+      </label><br>
+      <button id="connectBtn">Connect</button>
+    </div>
+
+    <div id="chatInterface" style="display:none;">
+      <div id="chat"></div>
+      <form id="messageForm">
+        <input type="text" id="messageInput" placeholder="Type your message" autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
+      <button id="clearHistoryBtn" style="display:none;">Clear History</button>
+    </div>
+  </div>
+
+  <div id="sidePanel">
+    <div id="activeUsers"></div>
+  </div>
+
+  <script>
+    let ws;
+    let serverUrl;
+
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+      const ip = document.getElementById('serverIp').value.trim();
+      const port = document.getElementById('serverPort').value.trim();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+      if (!ip || !port || !username || !password) {
+        alert('Please fill in all fields.');
+        return;
+      }
+      serverUrl = `http://${ip}:${port}`;
+      // Fetch history from the REST endpoint
+      try {
+        const res = await fetch(`${serverUrl}/history`);
+        const history = await res.json();
+        history.forEach(msg => {
+          addMessage(`${new Date(msg.timestamp).toLocaleString()} - ${msg.username}: ${msg.message}`, 'history-message');
+        });
+      } catch (e) {
+        addMessage("Error fetching history: " + e, 'system-message');
+      }
+      // Fetch active users from the REST endpoint
+      try {
+        const res = await fetch(`${serverUrl}/active_users`);
+        const data = await res.json();
+        updateActiveUsers(data.users);
+      } catch (e) {
+        addMessage("Error fetching active users: " + e, 'system-message');
+      }
+      // Connect via WebSocket
+      const wsUrl = `ws://${ip}:${port}/ws?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        document.getElementById('connectionForm').style.display = 'none';
+        document.getElementById('chatInterface').style.display = 'block';
+        addMessage('Connected to chat.', 'system-message');
+        if (username === 'admin') {
+          document.getElementById('clearHistoryBtn').style.display = 'block';
+        }
+      };
+      ws.onmessage = (event) => {
+        const message = event.data;
+        if (message.includes('joined the chat') || message.includes('left the chat')) {
+          addMessage(message, 'system-message');
+          // Fetch active users again to update the list
+          fetchActiveUsers();
+        } else {
+          const [user, ...msgParts] = message.split(': ');
+          const msg = msgParts.join(': ');
+          addMessage(`<span class="username">${user}</span>: <span class="message-text">${msg}</span>`);
+        }
+      };
+      ws.onclose = () => addMessage('Disconnected from chat.', 'system-message');
+      ws.onerror = () => addMessage('WebSocket error.', 'system-message');
+    });
+
+    document.getElementById('messageForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('messageInput');
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(input.value);
+        input.value = '';
+      }
+    });
+
+    document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${serverUrl}/history`, { method: 'DELETE' });
+        const result = await res.json();
+        addMessage(result.message, 'system-message');
+        document.getElementById('chat').innerHTML = '';
+      } catch (e) {
+        addMessage("Error clearing history: " + e, 'system-message');
+      }
+    });
+
+    function addMessage(msg, className = '') {
+      const chat = document.getElementById('chat');
+      const div = document.createElement('div');
+      div.innerHTML = msg;
+      if (className) {
+        div.classList.add(className);
+      }
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function fetchActiveUsers() {
+      try {
+        const res = await fetch(`${serverUrl}/active_users`);
+        const data = await res.json();
+        updateActiveUsers(data.users);
+      } catch (e) {
+        addMessage("Error fetching active users: " + e, 'system-message');
+      }
+    }
+
+    function updateActiveUsers(users) {
+      const activeUsersDiv = document.getElementById('activeUsers');
+      activeUsersDiv.innerHTML = '';
+      users.forEach(user => {
+        const div = document.createElement('div');
+        div.textContent = user;
+        activeUsersDiv.appendChild(div);
+      });
+    }
+  </script>
+</body>
+</html>
