@@ -175,6 +175,7 @@
   <script>
     let ws;
     let serverUrl;
+    let userColors = {};
 
     document.getElementById('connectBtn').addEventListener('click', connect);
     document.getElementById('connectionForm').addEventListener('keypress', (e) => {
@@ -193,6 +194,13 @@
         return;
       }
       serverUrl = `http://${ip}:${port}`;
+      // Fetch user colors from the REST endpoint
+      try {
+        const res = await fetch(`${serverUrl}/user_colors`);
+        userColors = await res.json();
+      } catch (e) {
+        addMessage("Error fetching user colors: " + e, 'system-message');
+      }
       // Fetch history from the REST endpoint
       try {
         const res = await fetch(`${serverUrl}/history`);
@@ -311,35 +319,29 @@
     function updateActiveUsers(users, currentUser = null) {
       const activeUsersDiv = document.getElementById('activeUsers');
       activeUsersDiv.innerHTML = '<div class="active-users-heading">current active:</div>';
-      if (currentUser && !Object.keys(users).includes(currentUser)) {
-        users[currentUser] = 'black'; // Ensure the current user is included with default color
-      }
       for (const [user, color] of Object.entries(users)) {
         const div = document.createElement('div');
-        div.textContent = user;
-        div.style.color = color;
-        activeUsersDiv.appendChild(div);
+        div.innerHTML = `<span class="active-user" style="color: ${String(color)}">${user}</span>`;
+        activeUsersDiv.append(div);
       }
+      // if (currentUser && !Object.keys(users).includes(currentUser)) {
+      //   users[currentUser] = userColors[currentUser] || 'black'; // Ensure the current user is included with default color
+      // }
+      // for (const [user, color] of Object.entries(users)) {
+      //   const span = document.createElement('span');
+      //   span.textContent = user;
+      //   span.style.color = userColors[user] || 'black';
+      //   activeUsersDiv.appendChild(span);
+      //   activeUsersDiv.appendChild(document.createElement('br')); // Add a line break after each user
+      // }
     }
 
     function updateCurrentUser(username) {
       const currentUserDiv = document.getElementById('currentUser');
-      const color = getUserColor(username);
+      const color = String(userColors[username] || 'black');
       currentUserDiv.innerHTML = `<span class="current-user-label">logged in as:</span> <span class="current-user-name" style="color: ${color};">${username}</span>`;
     }
 
-    function getUserColor(username) {
-      const userColors = {
-        "admin": "black",
-        "alice": "wonderland",
-        "dad": "darkgreen",
-        "mom": "coral",
-        "isaac": "red",
-        "eli": "navyblue",
-        "papa": "teal"
-      };
-      return userColors[username] || "black";
-    }
   </script>
 </body>
 </html>
